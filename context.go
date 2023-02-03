@@ -696,10 +696,8 @@ func (m *Context) renderStaticMap(gc *gg.Context, zoom int, center s2.LatLng, tr
 func (m *Context) renderLayer(gc *gg.Context, zoom int, center s2.LatLng, trans *Transformer, tileSize int, provider TileProvider) error {
 	// if provider is TileProvider
 	if tileProvider, ok := provider.(MapTileProvider); ok {
-		log.Println("render tile")
 		return m.renderTileLayer(gc, zoom, trans, tileSize, tileProvider)
 	} else if staticMapProvider, ok := provider.(StaticMapProvider); ok {
-		log.Println("render static map")
 		return m.renderStaticMap(gc, zoom, center, trans, staticMapProvider)
 	}
 
