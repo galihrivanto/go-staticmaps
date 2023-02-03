@@ -38,11 +38,11 @@ type Context struct {
 	background color.Color
 
 	objects  []MapObject
-	overlays []*TileProvider
+	overlays []TileProvider
 
 	userAgent    string
 	online       bool
-	tileProvider *TileProvider
+	tileProvider TileProvider
 	cache        TileCache
 
 	overrideAttribution *string
@@ -65,7 +65,7 @@ func NewContext() *Context {
 }
 
 // SetTileProvider sets the TileProvider to be used
-func (m *Context) SetTileProvider(t *TileProvider) {
+func (m *Context) SetTileProvider(t TileProvider) {
 	m.tileProvider = t
 }
 
@@ -209,7 +209,7 @@ func (m *Context) ClearObjects() {
 }
 
 // AddOverlay adds an overlay to the Context
-func (m *Context) AddOverlay(overlay *TileProvider) {
+func (m *Context) AddOverlay(overlay TileProvider) {
 	m.overlays = append(m.overlays, overlay)
 }
 
@@ -233,7 +233,17 @@ func (m *Context) Attribution() string {
 	if m.overrideAttribution != nil {
 		return *m.overrideAttribution
 	}
-	return m.tileProvider.Attribution
+	return m.tileProvider.Attribution()
+}
+
+func (m *Context) tileSize() int {
+	// if layer is tile provider
+	tileSize := 256
+	if p, ok := m.tileProvider.(MapTileProvider); ok {
+		tileSize = p.TileSize()
+	}
+
+	return tileSize
 }
 
 func (m *Context) determineBounds() s2.Rect {
@@ -268,7 +278,8 @@ func (m *Context) determineZoom(bounds s2.Rect, center s2.LatLng) int {
 		return 15
 	}
 
-	tileSize := m.tileProvider.TileSize
+	tileSize := m.tileSize()
+
 	marginL, marginT, marginR, marginB := m.determineExtraMarginPixels()
 	w := (float64(m.width) - marginL - marginR) / float64(tileSize)
 	h := (float64(m.height) - marginT - marginB) / float64(tileSize)
@@ -320,7 +331,7 @@ func (m *Context) adjustCenter(center s2.LatLng, zoom int) s2.LatLng {
 		return center
 	}
 
-	transformer := newTransformer(m.width, m.height, zoom, center, m.tileProvider.TileSize)
+	transformer := newTransformer(m.width, m.height, zoom, center, m.tileSize())
 
 	first := true
 	minX := 0.0
@@ -404,7 +415,7 @@ func (m *Context) Transformer() (*Transformer, error) {
 		return nil, err
 	}
 
-	return newTransformer(m.width, m.height, zoom, center, m.tileProvider.TileSize), nil
+	return newTransformer(m.width, m.height, zoom, center, m.tileSize()), nil
 }
 
 func newTransformer(width int, height int, zoom int, llCenter s2.LatLng, tileSize int) *Transformer {
@@ -498,7 +509,7 @@ func (m *Context) Render() (image.Image, error) {
 		return nil, err
 	}
 
-	tileSize := m.tileProvider.TileSize
+	tileSize := m.tileSize()
 	trans := newTransformer(m.width, m.height, zoom, center, tileSize)
 	img := image.NewRGBA(image.Rect(0, 0, trans.pWidth, trans.pHeight))
 	gc := gg.NewContextForRGBA(img)
@@ -507,13 +518,13 @@ func (m *Context) Render() (image.Image, error) {
 	}
 
 	// fetch and draw tiles to img
-	layers := []*TileProvider{m.tileProvider}
+	layers := []TileProvider{m.tileProvider}
 	if m.overlays != nil {
 		layers = append(layers, m.overlays...)
 	}
 
 	for _, layer := range layers {
-		if err := m.renderLayer(gc, zoom, trans, tileSize, layer); err != nil {
+		if err := m.renderLayer(gc, zoom, center, trans, tileSize, layer); err != nil {
 			return nil, err
 		}
 	}
@@ -557,7 +568,7 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 		return nil, nil, err
 	}
 
-	tileSize := m.tileProvider.TileSize
+	tileSize := m.tileSize()
 	trans := newTransformer(m.width, m.height, zoom, center, tileSize)
 	img := image.NewRGBA(image.Rect(0, 0, trans.pWidth, trans.pHeight))
 	gc := gg.NewContextForRGBA(img)
@@ -566,13 +577,13 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 	}
 
 	// fetch and draw tiles to img
-	layers := []*TileProvider{m.tileProvider}
+	layers := []TileProvider{m.tileProvider}
 	if m.overlays != nil {
 		layers = append(layers, m.overlays...)
 	}
 
 	for _, layer := range layers {
-		if err := m.renderLayer(gc, zoom, trans, tileSize, layer); err != nil {
+		if err := m.renderLayer(gc, zoom, center, trans, tileSize, layer); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -583,16 +594,16 @@ func (m *Context) RenderWithTransformer() (image.Image, *Transformer, error) {
 	}
 
 	// draw attribution
-	if m.tileProvider.Attribution == "" {
+	if m.tileProvider.Attribution() == "" {
 		return img, trans, nil
 	}
-	_, textHeight := gc.MeasureString(m.tileProvider.Attribution)
+	_, textHeight := gc.MeasureString(m.tileProvider.Attribution())
 	boxHeight := textHeight + 4.0
 	gc.SetRGBA(0.0, 0.0, 0.0, 0.5)
 	gc.DrawRectangle(0.0, float64(trans.pHeight)-boxHeight, float64(trans.pWidth), boxHeight)
 	gc.Fill()
 	gc.SetRGBA(1.0, 1.0, 1.0, 0.75)
-	gc.DrawString(m.tileProvider.Attribution, 4.0, float64(m.height)-4.0)
+	gc.DrawString(m.tileProvider.Attribution(), 4.0, float64(m.height)-4.0)
 
 	return img, trans, nil
 }
@@ -611,7 +622,7 @@ func (m *Context) RenderWithBounds() (image.Image, s2.Rect, error) {
 	return img, trans.Rect(), nil
 }
 
-func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tileSize int, provider *TileProvider) error {
+func (m *Context) renderTileLayer(gc *gg.Context, zoom int, trans *Transformer, tileSize int, provider MapTileProvider) error {
 	var wg sync.WaitGroup
 	tiles := (1 << uint(zoom))
 	fetchedTiles := make(chan *Tile)
@@ -646,7 +657,7 @@ func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tile
 						tile.X = xx * tileSize
 						tile.Y = yy * tileSize
 						fetchedTiles <- tile
-					} else if err == errTileNotFound && provider.IgnoreNotFound {
+					} else if err == errTileNotFound && provider.IgnoreNotFound() {
 						log.Printf("Error downloading tile file: %s (Ignored)", err)
 					} else {
 						log.Printf("Error downloading tile file: %s", err)
@@ -660,6 +671,36 @@ func (m *Context) renderLayer(gc *gg.Context, zoom int, trans *Transformer, tile
 
 	for tile := range fetchedTiles {
 		gc.DrawImage(tile.Img, tile.X, tile.Y)
+	}
+
+	return nil
+}
+
+func (m *Context) renderStaticMap(gc *gg.Context, zoom int, center s2.LatLng, trans *Transformer, provider StaticMapProvider) error {
+	t := NewStaticMapFetcher(provider, m.cache, m.online)
+	if m.userAgent != "" {
+		t.SetUserAgent(m.userAgent)
+	}
+
+	mm := &StaticMap{Zoom: zoom, X: center.Lng.Degrees(), Y: center.Lat.Degrees(), Width: trans.pWidth, Height: trans.pHeight}
+	err := t.Fetch(mm)
+	if err != nil {
+		log.Printf("Error downloading static map file: %s", err)
+	}
+
+	gc.DrawImage(mm.Img, 0, 0)
+
+	return err
+}
+
+func (m *Context) renderLayer(gc *gg.Context, zoom int, center s2.LatLng, trans *Transformer, tileSize int, provider TileProvider) error {
+	// if provider is TileProvider
+	if tileProvider, ok := provider.(MapTileProvider); ok {
+		log.Println("render tile")
+		return m.renderTileLayer(gc, zoom, trans, tileSize, tileProvider)
+	} else if staticMapProvider, ok := provider.(StaticMapProvider); ok {
+		log.Println("render static map")
+		return m.renderStaticMap(gc, zoom, center, trans, staticMapProvider)
 	}
 
 	return nil
