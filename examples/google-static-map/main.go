@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	sm "github.com/flopp/go-staticmaps"
@@ -77,6 +78,12 @@ func (p *gMapProvider) Attribution() string {
 	return p.attribution
 }
 
+func (p *gMapProvider) TileSize() int {
+	// maximum google static width and height is 640
+	// use moderate size and lets library merge tiles
+	return 256
+}
+
 func (p *gMapProvider) GetURL(zoom int, x, y float64, width, height int) string {
 	// construct google static map url
 	var url string
@@ -98,19 +105,31 @@ func (p *gMapProvider) GetURL(zoom int, x, y float64, width, height int) string 
 		url += fmt.Sprintf("&zoom=%d", zoom)
 	}
 
+	for _, style := range p.options.styles {
+		url += "&style=" + style
+	}
+
+	log.Println("url", url)
+
 	return url
 }
 
 func main() {
 	ctx := sm.NewContext()
-	ctx.SetSize(400, 300)
 	ctx.SetCenter(s2.LatLngFromDegrees(1.3011624468555132, 103.85775516239742))
-	ctx.SetZoom(17)
+	ctx.SetZoom(19)
+	ctx.SetSize(2048, 2048)
 	ctx.SetTileProvider(
 		GMapTileProvider(
 			GMapKey(os.Getenv("GOOGLE_MAP_KEY")),
+			GMapStyles(
+				"feature:poi|visibility:off",
+			),
 		),
 	)
+
+	// no cache
+	ctx.SetCache(nil)
 
 	img, err := ctx.Render()
 	if err != nil {

@@ -22,10 +22,10 @@ type StaticMapFetcher struct {
 }
 
 // StaticMap defines a staticMapFile
-type StaticMap struct {
-	Img                 image.Image
-	X, Y                float64
-	Zoom, Width, Height int
+type StaticMapTile struct {
+	Img              image.Image
+	CenterX, CenterY float64
+	X, Y, Zoom, Size int
 }
 
 // NewStaticMapFetcher creates a new NewStaticMapFetcher struct
@@ -53,9 +53,9 @@ func cacheStaticMapFileName(cache TileCache, providerName string, zoom int, x, y
 }
 
 // Fetch download (or retrieves from the cache) a tile image for the specified zoom level and tile coordinates
-func (t *StaticMapFetcher) Fetch(m *StaticMap) error {
+func (t *StaticMapFetcher) Fetch(m *StaticMapTile) error {
 	if t.cache != nil {
-		fileName := cacheStaticMapFileName(t.cache, t.provider.Name(), m.Zoom, m.X, m.Y)
+		fileName := cacheStaticMapFileName(t.cache, t.provider.Name(), m.Zoom, m.CenterX, m.CenterY)
 		cachedImg, err := t.loadCache(fileName)
 		if err == nil {
 			m.Img = cachedImg
@@ -63,7 +63,7 @@ func (t *StaticMapFetcher) Fetch(m *StaticMap) error {
 		}
 	}
 
-	url := t.provider.GetURL(m.Zoom, m.X, m.Y, m.Width, m.Height)
+	url := t.provider.GetURL(m.Zoom, m.CenterX, m.CenterY, m.Size, m.Size)
 	data, err := t.download(url)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func (t *StaticMapFetcher) Fetch(m *StaticMap) error {
 	}
 
 	if t.cache != nil {
-		fileName := cacheStaticMapFileName(t.cache, t.provider.Name(), m.Zoom, m.X, m.Y)
+		fileName := cacheStaticMapFileName(t.cache, t.provider.Name(), m.Zoom, m.CenterX, m.CenterY)
 		if err := t.storeCache(fileName, data); err != nil {
 			log.Printf("Failed to store map tile as '%s': %s", fileName, err)
 		}

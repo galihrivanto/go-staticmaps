@@ -11,6 +11,7 @@ import "fmt"
 type TileProvider interface {
 	Name() string
 	Attribution() string
+	TileSize() int
 }
 
 // StaticMapProvider .
@@ -23,7 +24,6 @@ type StaticMapProvider interface {
 type MapTileProvider interface {
 	TileProvider
 	IgnoreNotFound() bool
-	TileSize() int
 	Shards() []string
 	GetURL(shard string, zoom, x, y int) string
 }
